@@ -50,17 +50,14 @@ bool EposManager::init(ros::NodeHandle &root_nh, ros::NodeHandle &motors_nh,
     return true;
 }
 
-void EposManager::modeSwitch(std::string cmd_mode, ros::NodeHandle &root_nh, ros::NodeHandle &motors_nh,
+void EposManager::modeSwitch(std::vector<std::string> controller_modes, ros::NodeHandle &root_nh, ros::NodeHandle &motors_nh,
             const std::vector<std::string> &motor_names)
 {
     int i = 0;
     BOOST_FOREACH (const std::string &motor_name, motor_names)
     {
         ros::NodeHandle motor_nh(motors_nh, motor_name);
-
-        //std::shared_ptr<EposMotor> motor(new EposMotor());
-        m_motors[i]->changeControlMode(cmd_mode, root_nh, motor_nh, motor_name);
-        //m_motors.push_back(motor);
+        m_motors[i]->changeControlMode(controller_modes[i], root_nh, motor_nh, motor_name);
         i++;
     }
     m_all_motor_publisher = motors_nh.advertise<maxon_epos_msgs::MotorStates>("get_all_states", 100);

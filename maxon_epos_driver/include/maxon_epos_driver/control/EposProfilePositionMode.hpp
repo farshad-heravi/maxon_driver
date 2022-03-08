@@ -17,7 +17,7 @@ class EposProfilePositionMode : public ControlModeBase {
 public:
     virtual ~EposProfilePositionMode();
 
-    virtual void init(ros::NodeHandle &motor_nh, NodeHandle &node_handle);
+    virtual void init(ros::NodeHandle &motor_nh, NodeHandle &node_handle, const std::string &controller_name);
     virtual void activate();
     virtual void read();
     virtual void write(const double position, const double velocity, const double current);

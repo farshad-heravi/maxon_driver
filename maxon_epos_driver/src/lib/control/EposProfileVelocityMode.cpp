@@ -10,9 +10,9 @@
 EposProfileVelocityMode::~EposProfileVelocityMode()
 {}
 
-void EposProfileVelocityMode::init(ros::NodeHandle &motor_nh, NodeHandle &node_handle)
+void EposProfileVelocityMode::init(ros::NodeHandle &motor_nh, NodeHandle &node_handle, const std::string &controller_name)
 {
-    ControlModeBase::init(motor_nh, node_handle);
+    ControlModeBase::init(motor_nh, node_handle, controller_name);
     // this is savage copy + paste
     if (m_use_ros_unit) {
         ros::NodeHandle encoder_nh(motor_nh, "encoder");

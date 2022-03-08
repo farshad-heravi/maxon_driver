@@ -27,7 +27,7 @@ public:
 
     void write(const maxon_epos_msgs::MotorStates::ConstPtr& msg);
 
-    void modeSwitch(std::string cmd_mode, ros::NodeHandle &root_nh, ros::NodeHandle &motors_nh,
+    void modeSwitch(std::vector<std::string> controller_modes, ros::NodeHandle &root_nh, ros::NodeHandle &motors_nh,
             const std::vector<std::string> &motor_names);
 
 private:

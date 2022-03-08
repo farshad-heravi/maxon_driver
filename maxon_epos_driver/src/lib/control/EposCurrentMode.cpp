@@ -11,9 +11,9 @@
 EposCurrentMode::~EposCurrentMode()
 {}
 
-void EposCurrentMode::init(ros::NodeHandle &motor_nh, NodeHandle &node_handle)
+void EposCurrentMode::init(ros::NodeHandle &motor_nh, NodeHandle &node_handle, const std::string &controller_name)
 {
-    ControlModeBase::init(motor_nh, node_handle);
+    ControlModeBase::init(motor_nh, node_handle, controller_name);
 }
 
 void EposCurrentMode::activate()

@@ -39,6 +39,7 @@ EposMotor::~EposMotor()
 void EposMotor::init(ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh, const std::string &motor_name)
 {
     m_motor_name = motor_name;
+    motor_nh_ = motor_nh;
     initEposDeviceHandle(motor_nh);
 
     VCS_NODE_COMMAND_NO_ARGS(SetDisableState, m_epos_handle);
@@ -170,41 +171,50 @@ void EposMotor::initProtocolStackChanges(ros::NodeHandle &motor_nh)
 void EposMotor::initControlMode(ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh) // how do I call this function from the outside?
 {
     const std::string control_mode(motor_nh.param<std::string>("control_mode", "profile_position")); 
+    std::string controller_name;
     if (control_mode == "profile_position") {
         m_control_mode.reset(new EposProfilePositionMode());
+        controller_name = "profile_position";
     } else if (control_mode == "profile_velocity") {
         m_control_mode.reset(new EposProfileVelocityMode());
-    } else if (control_mode == "current") {
+        controller_name = "profile_velocity";
+    } else if (control_mode == "profile_current") {
         m_control_mode.reset(new EposCurrentMode());
+        controller_name = "profile_current";
     } else {
         throw EposException("Unsupported control mode (" + control_mode + ")");
+        controller_name = "None";
     }
-    m_control_mode->init(motor_nh, m_epos_handle);
+    m_control_mode->init(motor_nh, m_epos_handle, controller_name);
 }
 
 void EposMotor::changeControlMode(const std::string &cmd_mode, ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh,
-            const std::string &motor_name) // how do I call this function from the outside?
+            const std::string &motor_name)
 {
-    // Part taken from the init function here in EposMotor.cpp
     m_motor_name = motor_name;
-    initEposDeviceHandle(motor_nh);
+    // initEposDeviceHandle(motor_nh); // ! Does it required?! Can we reuse the previous handle?!. Recoded. Do test it and if works remove this line.
     VCS_NODE_COMMAND_NO_ARGS(SetDisableState, m_epos_handle);
-    initDeviceError();
-    initProtocolStackChanges(motor_nh);
+    // initDeviceError();
+    // initProtocolStackChanges(motor_nh);
+    std::string current_active_controller = m_control_mode->name;
+    if (current_active_controller == cmd_mode){
+        ROS_INFO_STREAM("The " << cmd_mode << " controller has already started and is running.");
+        return;
+    }
     if (cmd_mode == "profile_position") {
-        std::cout<< "Changing to Position Control!"<<std::endl; // to remove after debug
+        std::cout<< "Changing to Position Control!" <<std::endl; // to remove after debug
         m_control_mode.reset(new EposProfilePositionMode());
         VCS_NODE_COMMAND_NO_ARGS(ActivateProfilePositionMode, m_epos_handle);
     } else if (cmd_mode == "profile_velocity") {
         std::cout<<"Changing to Velocity Control"<<std::endl; // to remove after debug
         m_control_mode.reset(new EposProfileVelocityMode());
         VCS_NODE_COMMAND_NO_ARGS(ActivateProfileVelocityMode, m_epos_handle);
-    } else if (cmd_mode == "current") {
+    } else if (cmd_mode == "profile_current") {
         m_control_mode.reset(new EposCurrentMode());
     } else {
         throw EposException("Unsupported control mode (" + cmd_mode + ")");
     }
-    m_control_mode->init(motor_nh, m_epos_handle);
+    m_control_mode->init(motor_nh, m_epos_handle, cmd_mode);
     initEncoderParams(motor_nh);
     if (cmd_mode == "profile_position") {
         initProfilePosition(motor_nh); // I want to be able to change this mode from outside
@@ -213,12 +223,10 @@ void EposMotor::changeControlMode(const std::string &cmd_mode, ros::NodeHandle &
     } else {
         throw EposException("Unsupported control mode (" + cmd_mode + ")");
     }
-    //initProfilePosition(motor_nh); // I want to be able to change this mode from outside
     initMiscParams(motor_nh);
     VCS_NODE_COMMAND_NO_ARGS(SetEnableState, m_epos_handle);
     m_state_publisher = motor_nh.advertise<maxon_epos_msgs::MotorState>("get_state", 100);
     m_state_subscriber = motor_nh.subscribe("set_state", 100, &EposMotor::writeCallback, this);
-    //m_mode_subscriber = motor_nh.subscribe("set_mode", 100, &EposMotor::modeCallback, this);
 }
 
 /**

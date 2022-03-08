@@ -13,8 +13,9 @@
 ControlModeBase::~ControlModeBase()
 {}
 
-void ControlModeBase::init(ros::NodeHandle &motor_nh, NodeHandle &node_handle)
+void ControlModeBase::init(ros::NodeHandle &motor_nh, NodeHandle &node_handle, const std::string &controller_name)
 {
+    name = controller_name;
     m_epos_handle = node_handle;
     m_use_ros_unit = motor_nh.param("use_ros_unit", false);
 }

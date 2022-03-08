@@ -58,6 +58,7 @@ private:
     NodeHandle m_epos_handle;
     ControlModePtr m_control_mode;
     ControlModeMap m_control_mode_map;
+    ros::NodeHandle motor_nh_;
 
     double m_position;
     double m_velocity;

@@ -15,9 +15,10 @@
 
 class ControlModeBase {
 public:
+    std::string name;
     virtual ~ControlModeBase();
 
-    virtual void init(ros::NodeHandle &motor_nh, NodeHandle &node_handle);
+    virtual void init(ros::NodeHandle &motor_nh, NodeHandle &node_handle, const std::string &controller_name);
 
     // activate operation mode
     virtual void activate() = 0;
