@@ -53,15 +53,9 @@ bool EposManager::init(ros::NodeHandle &root_nh, ros::NodeHandle &motors_nh,
 void EposManager::modeSwitch(std::string cmd_mode, ros::NodeHandle &root_nh, ros::NodeHandle &motors_nh,
             const std::vector<std::string> &motor_names)
 {
-    // flush the m_motors vector
-    //m_motors.clear();
-    // change the parameter and voilà
-    // init again
     int i = 0;
     BOOST_FOREACH (const std::string &motor_name, motor_names)
     {
-        ROS_INFO_STREAM("Loading Epos: " << motor_name);
-        // Copy constructor => ns = motors_nh's namespace + / + motor_name
         ros::NodeHandle motor_nh(motors_nh, motor_name);
 
         //std::shared_ptr<EposMotor> motor(new EposMotor());
@@ -69,7 +63,6 @@ void EposManager::modeSwitch(std::string cmd_mode, ros::NodeHandle &root_nh, ros
         //m_motors.push_back(motor);
         i++;
     }
-
     m_all_motor_publisher = motors_nh.advertise<maxon_epos_msgs::MotorStates>("get_all_states", 100);
     m_all_motor_subscriber = motors_nh.subscribe("set_all_states", 100, &EposManager::write, this);
 

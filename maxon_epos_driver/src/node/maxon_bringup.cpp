@@ -38,13 +38,6 @@ int main(int argc, char** argv)
     while (ros::ok()) {
         manager.read();
         sleep_rate.sleep();
-            std_msgs::StringConstPtr m_control_mod = ros::topic::waitForMessage<std_msgs::String>("/maxon_bringup/set_mode",ros::Duration(0.15)); //this is nice
-            if (m_control_mod) 
-            {
-                std::string new_mode = m_control_mod->data.c_str();
-                std::cout<<new_mode<<" Msg received!"<<std::endl; // to remove after debug
-                manager.modeSwitch(new_mode,nh, private_nh, motor_names);
-            }
     }
 
     spinner.stop();
