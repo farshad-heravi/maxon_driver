@@ -19,41 +19,34 @@
 
 class EposMotor {
 public:
+    std::string m_motor_name;
     EposMotor();
     virtual ~EposMotor();
 
-    void init(ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh,
-            const std::string &motor_name);
+    void init(ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh, const std::string &motor_name);
 
-    maxon_epos_msgs::MotorState read();
-    void write(const double position, const double velocity, const double current);
-    //void writeMode(const std::string& cmd_mode);
-    void changeControlMode(const std::string &cmd_mode, ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh,
-            const std::string &motor_name);
+    void read(double &joint_position, double &joint_velocity, double &joint_current);
+    void write(double &pos, double &vel, double &cur);
+    void changeControlMode(const std::string &cmd_mode, ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh);
+    std::string get_active_controller();
 
 private:
     void initEposDeviceHandle(ros::NodeHandle &motor_nh);
     void initDeviceError();
     void initProtocolStackChanges(ros::NodeHandle &motor_nh);
-    void initControlMode(ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh);
+    void initControlMode(ros::NodeHandle &motor_nh);
     void initEncoderParams(ros::NodeHandle &motor_nh);
     void initProfilePosition(ros::NodeHandle &motor_nh);
     void initProfileVelocity(ros::NodeHandle &motor_nh);
+    void initProfileCurrent(ros::NodeHandle &motor_nh);
     void initMiscParams(ros::NodeHandle &motor_nh);
-
-    double ReadPosition();
-    double ReadVelocity();
-    double ReadCurrent();
 
     void writeCallback(const maxon_epos_msgs::MotorState::ConstPtr &msg);
 
-
 private:
-
     typedef std::shared_ptr<ControlModeBase> ControlModePtr;
     typedef std::map<std::string, ControlModePtr> ControlModeMap;
 
-    std::string m_motor_name;
 
     NodeHandle m_epos_handle;
     ControlModePtr m_control_mode;

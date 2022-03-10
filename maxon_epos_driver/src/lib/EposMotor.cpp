@@ -36,56 +36,44 @@ EposMotor::~EposMotor()
 }
 
 
-void EposMotor::init(ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh, const std::string &motor_name)
+void EposMotor::init(ros::NodeHandle& root_nh, ros::NodeHandle& motor_nh, const std::string& motor_name)
 {
     m_motor_name = motor_name;
-    motor_nh_ = motor_nh;
+    // create motor handle
     initEposDeviceHandle(motor_nh);
 
+    // disable the motor for initialization
     VCS_NODE_COMMAND_NO_ARGS(SetDisableState, m_epos_handle);
-
+    // get and clear existed errors
     initDeviceError();
     initProtocolStackChanges(motor_nh);
-    initControlMode(root_nh, motor_nh);
+    // initialize motor default controller
+    initControlMode(motor_nh);
+    // Set encoder properties
     initEncoderParams(motor_nh);
-    initProfilePosition(motor_nh); // I want to be able to change this mode from outside
+    // intialize position, velocity and current profiles
+    initProfilePosition(motor_nh);
     initProfileVelocity(motor_nh);
+    initProfileCurrent(motor_nh);
+    // set other settings
     initMiscParams(motor_nh);
 
+    // enable the motor
     VCS_NODE_COMMAND_NO_ARGS(SetEnableState, m_epos_handle);
-
-    m_state_publisher = motor_nh.advertise<maxon_epos_msgs::MotorState>("get_state", 100);
-    m_state_subscriber = motor_nh.subscribe("set_state", 100, &EposMotor::writeCallback, this);
-    //m_mode_subscriber = motor_nh.subscribe("set_mode", 100, &EposMotor::modeCallback, this);
-    
 }
 
-maxon_epos_msgs::MotorState EposMotor::read()
+void EposMotor::read(double &joint_position, double &joint_velocity, double &joint_current)
+{
+    m_control_mode->read(joint_position, joint_velocity, joint_current);
+    // ROS_INFO_STREAM("INSIDE MOTOR" << joint_position << ", " << joint_velocity << ", " << joint_current);
+}
+
+void EposMotor::write(double &pos, double &vel, double &cur)
 {
     try {
         if (m_control_mode) {
-            m_control_mode->read();
-        }
-        m_position = ReadPosition();
-        m_velocity = ReadVelocity();
-        m_current = ReadCurrent();
-    } catch (const EposException &e) {
-        ROS_ERROR_STREAM(e.what());
-    }
-    maxon_epos_msgs::MotorState msg;
-    msg.motor_name = m_motor_name;
-    msg.position = m_position;
-    msg.velocity = m_velocity;
-    msg.current = m_current;
-    m_state_publisher.publish(msg);
-    return msg;
-}
-
-void EposMotor::write(const double position, const double velocity, const double current)
-{
-    try {
-        if (m_control_mode) {
-            m_control_mode->write(position, velocity, current);
+            // ROS_INFO_STREAM("Received: [" << pos << ", " << vel << ", " << cur << "] at " << m_motor_name);
+            m_control_mode->write(pos, vel, cur);
         }
     } catch (const EposException &e) {
         ROS_ERROR_STREAM(e.what());
@@ -99,7 +87,9 @@ void EposMotor::write(const double position, const double velocity, const double
  */
 void EposMotor::writeCallback(const maxon_epos_msgs::MotorState::ConstPtr &msg)
 {
-    write(msg->position, msg->velocity, msg->current);
+    // FIXME needed?!
+    // std::vector<double> data = {msg->position, msg->velocity, msg->current};
+    // write(data);
 }
 
 void EposMotor::initEposDeviceHandle(ros::NodeHandle &motor_nh)
@@ -122,6 +112,7 @@ void EposMotor::initDeviceError()
     unsigned char num_of_device_errors;
     // Get Current Error nums
     VCS_NODE_COMMAND(GetNbOfDeviceError, m_epos_handle, &num_of_device_errors);
+    // Print existed errors to ROS_WARN_STREAM
     for (int i = 1; i <= num_of_device_errors; i++) {
         unsigned int device_error_code;
         VCS_NODE_COMMAND(GetDeviceErrorCode, m_epos_handle, i, &device_error_code);
@@ -165,37 +156,30 @@ void EposMotor::initProtocolStackChanges(ros::NodeHandle &motor_nh)
 /**
  * @brief Initialize Control Mode
  *
- * @param root_nh NodeHandle of TopLevel
  * @param motor_nh NodeHandle of motor
  */
-void EposMotor::initControlMode(ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh) // how do I call this function from the outside?
-{
-    const std::string control_mode(motor_nh.param<std::string>("control_mode", "profile_position")); 
-    std::string controller_name;
+void EposMotor::initControlMode(ros::NodeHandle &motor_nh){
+    // get default control mode from rosparam
+    const std::string control_mode(motor_nh.param<std::string>("control_mode", "profile_position"));
+
     if (control_mode == "profile_position") {
         m_control_mode.reset(new EposProfilePositionMode());
-        controller_name = "profile_position";
     } else if (control_mode == "profile_velocity") {
         m_control_mode.reset(new EposProfileVelocityMode());
-        controller_name = "profile_velocity";
     } else if (control_mode == "profile_current") {
         m_control_mode.reset(new EposCurrentMode());
-        controller_name = "profile_current";
     } else {
         throw EposException("Unsupported control mode (" + control_mode + ")");
-        controller_name = "None";
     }
-    m_control_mode->init(motor_nh, m_epos_handle, controller_name);
+
+    m_control_mode->init(motor_nh, m_epos_handle, control_mode, m_max_qc);
 }
 
-void EposMotor::changeControlMode(const std::string &cmd_mode, ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh,
-            const std::string &motor_name)
+void EposMotor::changeControlMode(const std::string &cmd_mode, ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh)
 {
-    m_motor_name = motor_name;
-    // initEposDeviceHandle(motor_nh); // ! Does it required?! Can we reuse the previous handle?!. Recoded. Do test it and if works remove this line.
     VCS_NODE_COMMAND_NO_ARGS(SetDisableState, m_epos_handle);
-    // initDeviceError();
-    // initProtocolStackChanges(motor_nh);
+    initDeviceError();
+    initProtocolStackChanges(motor_nh);
     std::string current_active_controller = m_control_mode->name;
     if (current_active_controller == cmd_mode){
         ROS_INFO_STREAM("The " << cmd_mode << " controller has already started and is running.");
@@ -205,28 +189,20 @@ void EposMotor::changeControlMode(const std::string &cmd_mode, ros::NodeHandle &
         std::cout<< "Changing to Position Control!" <<std::endl; // to remove after debug
         m_control_mode.reset(new EposProfilePositionMode());
         VCS_NODE_COMMAND_NO_ARGS(ActivateProfilePositionMode, m_epos_handle);
+        initProfilePosition(motor_nh);
     } else if (cmd_mode == "profile_velocity") {
         std::cout<<"Changing to Velocity Control"<<std::endl; // to remove after debug
         m_control_mode.reset(new EposProfileVelocityMode());
         VCS_NODE_COMMAND_NO_ARGS(ActivateProfileVelocityMode, m_epos_handle);
+        initProfileVelocity(motor_nh);
     } else if (cmd_mode == "profile_current") {
         m_control_mode.reset(new EposCurrentMode());
     } else {
         throw EposException("Unsupported control mode (" + cmd_mode + ")");
     }
-    m_control_mode->init(motor_nh, m_epos_handle, cmd_mode);
-    initEncoderParams(motor_nh);
-    if (cmd_mode == "profile_position") {
-        initProfilePosition(motor_nh); // I want to be able to change this mode from outside
-    } else if (cmd_mode == "profile_velocity") {
-        initProfileVelocity(motor_nh); // I want to be able to change this mode from outside
-    } else {
-        throw EposException("Unsupported control mode (" + cmd_mode + ")");
-    }
-    initMiscParams(motor_nh);
+    m_control_mode->init(motor_nh, m_epos_handle, cmd_mode, m_max_qc);
+    
     VCS_NODE_COMMAND_NO_ARGS(SetEnableState, m_epos_handle);
-    m_state_publisher = motor_nh.advertise<maxon_epos_msgs::MotorState>("get_state", 100);
-    m_state_subscriber = motor_nh.subscribe("set_state", 100, &EposMotor::writeCallback, this);
 }
 
 /**
@@ -235,32 +211,32 @@ void EposMotor::changeControlMode(const std::string &cmd_mode, ros::NodeHandle &
  * @param motor_nh NodeHandle of motor
  */
 void EposMotor::initEncoderParams(ros::NodeHandle &motor_nh)
-{
+{   
+    // create encoder ros node handler
     ros::NodeHandle encoder_nh(motor_nh, "encoder");
-    
+    // get /[robot_name]/<motor_name>/encoder/type from rosparam
     const int type(encoder_nh.param("type", 0));
+    
+    // set sensor type
     VCS_NODE_COMMAND(SetSensorType, m_epos_handle, type);
 
-    if (type == 1 || type == 2) {
-        // Incremental Encoder
+    if (type == 1 || type == 2) {   // Incremental Encoder
         const int resolution(encoder_nh.param("resolution", 0));
         const int gear_ratio(encoder_nh.param("gear_ratio", 0));
         if (resolution == 0 || gear_ratio == 0) {
-            throw EposException("Please set parameter 'resolution' and 'gear_ratio'");
+            throw EposException("Please set both 'resolution' and 'gear_ratio' parameters");
         }
         const bool inverted_polarity(encoder_nh.param("inverted_polarity", false));
         if (inverted_polarity) {
-            ROS_INFO_STREAM(m_motor_name + ": Inverted polarity is True");
+            ROS_INFO_STREAM(m_motor_name << ": Inverted polarity is True");
         }
         VCS_NODE_COMMAND(SetIncEncoderParameter, m_epos_handle, resolution, inverted_polarity);
 
         m_max_qc = 4 * resolution * gear_ratio;
-
-    } else if (type == 4 || type == 5) {
-        // SSI Abs Encoder
-        bool inverted_polarity;
+        ROS_INFO_STREAM(m_motor_name << "\'s max qc:" << m_max_qc);
+    } else if (type == 4 || type == 5) {    // SSI Abs Encoder
         int data_rate, number_of_multiturn_bits, number_of_singleturn_bits;
-        encoder_nh.param("inverted_polarity", inverted_polarity, false);
+        const bool inverted_polarity(encoder_nh.param("inverted_polarity", false));
         if (encoder_nh.hasParam("data_rate") && encoder_nh.hasParam("number_of_singleturn_bits") && encoder_nh.hasParam("number_of_multiturn_bits")) {
             encoder_nh.getParam("data_rate", data_rate);
             encoder_nh.getParam("number_of_multiturn_bits", number_of_multiturn_bits);
@@ -279,25 +255,45 @@ void EposMotor::initEncoderParams(ros::NodeHandle &motor_nh)
 void EposMotor::initProfilePosition(ros::NodeHandle &motor_nh)
 {
     ros::NodeHandle profile_position_nh(motor_nh, "profile_position");
-    if (profile_position_nh.hasParam("velocity")) {
-        int velocity, acceleration, deceleration;
-        profile_position_nh.getParam("velocity", velocity);
-        profile_position_nh.getParam("acceleration", acceleration);
-        profile_position_nh.getParam("deceleration", deceleration);
-        VCS_NODE_COMMAND(SetPositionProfile, m_epos_handle, velocity, acceleration, deceleration);
+    if (profile_position_nh.hasParam("velocity")
+        && profile_position_nh.hasParam("acceleration")
+        && profile_position_nh.hasParam("deceleration")) {
+            int velocity, acceleration, deceleration;
+            profile_position_nh.getParam("velocity", velocity);
+            profile_position_nh.getParam("acceleration", acceleration);
+            profile_position_nh.getParam("deceleration", deceleration);
+            VCS_NODE_COMMAND(SetPositionProfile, m_epos_handle, velocity, acceleration, deceleration);
+    } else {
+        ROS_ERROR_STREAM("Do set all parameters of ProfilePosition.");
     }
 }
 
 void EposMotor::initProfileVelocity(ros::NodeHandle &motor_nh)
 {
     ros::NodeHandle profile_velocity_nh(motor_nh, "profile_velocity");
-    if (profile_velocity_nh.hasParam("acceleration")) {
-        int acceleration, deceleration; // this parameters should be checked to improve the node...
+    if (profile_velocity_nh.hasParam("acceleration") && profile_velocity_nh.hasParam("deceleration")) {
+        int acceleration, deceleration;
         profile_velocity_nh.getParam("acceleration", acceleration);
         profile_velocity_nh.getParam("deceleration", deceleration);
         VCS_NODE_COMMAND(SetVelocityProfile, m_epos_handle, acceleration, deceleration);
+    } else {
+        ROS_ERROR_STREAM("Do set all parameters of ProfileVelocity.");
     }
 }
+
+void EposMotor::initProfileCurrent(ros::NodeHandle &motor_nh)
+{
+    // TODO
+    // ros::NodeHandle profile_current_nh(motor_nh, "profile_current");
+    // if (profile_current_nh.hasParam("current_musst")) {
+    //     int must;
+    //     must.getParam("current_musst", must);
+    //     VCS_NODE_COMMAND(SetCurrentMust, m_epos_handle, acceleration, deceleration);
+    // } else {
+    //     ROS_ERROR_STREAM("Do set all parameters of ProfileVelocity.");
+    // }
+}
+
 /**
  * @brief Initialize other parameters
  *
@@ -307,62 +303,4 @@ void EposMotor::initMiscParams(ros::NodeHandle &motor_nh)
 {
     // use ros unit or default epos unit
     motor_nh.param("use_ros_unit", m_use_ros_unit, false);
-}
-
-
-/**
- * @brief Read Motor Position Function
- *
- * @return motor position
- */
-double EposMotor::ReadPosition()
-{
-    int raw_position;
-    double position;
-    VCS_NODE_COMMAND(GetPositionIs, m_epos_handle, &raw_position);
-    if (m_use_ros_unit) {
-        // quad-counts of the encoder -> rad
-        position = (raw_position / static_cast<double>(m_max_qc)) * 2. * M_PI;
-    } else {
-        position = raw_position;
-    }
-    return position;
-}
-
-/**
- * @brief Read Motor Velocity Function
- *
- * @return motor velocity
- */
-double EposMotor::ReadVelocity()
-{
-    int raw_velocity;
-    double velocity;
-    VCS_NODE_COMMAND(GetVelocityIs, m_epos_handle, &raw_velocity);
-    if (m_use_ros_unit) {
-        // rpm -> rad/s
-        velocity = raw_velocity * M_PI / 30.;
-    } else {
-        velocity = raw_velocity;
-    }
-    return velocity;
-}
-
-/**
- * @brief Read Motor Current Funciton
- *
- * @return motor current
- */
-double EposMotor::ReadCurrent()
-{
-    short raw_current;
-    double current;
-    VCS_NODE_COMMAND(GetCurrentIs, m_epos_handle, &raw_current);
-    if (m_use_ros_unit) {
-        // mA -> A
-        current = raw_current / 1000.;
-    } else {
-        current = raw_current;
-    }
-    return current;
 }

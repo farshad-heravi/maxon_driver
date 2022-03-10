@@ -7,20 +7,14 @@
 
 #include "maxon_epos_driver/control/EposCurrentMode.hpp"
 
-
-EposCurrentMode::~EposCurrentMode()
-{}
-
-void EposCurrentMode::init(ros::NodeHandle &motor_nh, NodeHandle &node_handle, const std::string &controller_name)
+void EposCurrentMode::activate()
 {
-    ControlModeBase::init(motor_nh, node_handle, controller_name);
+    // TODO test it!
+    VCS_NODE_COMMAND_NO_ARGS(ActivateCurrentMode, m_epos_handle);
 }
 
-void EposCurrentMode::activate()
-{}
-
-void EposCurrentMode::read()
-{}
-
-void EposCurrentMode::write(const double position, const double velocity, const double current)
-{}
+void EposCurrentMode::write(double &pos, double &vel, double &cur)
+{
+    //  TODO
+    
+}

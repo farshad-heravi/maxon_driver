@@ -36,7 +36,7 @@ int main(int argc, char** argv)
     spinner.start();
 
     while (ros::ok()) {
-        manager.read();
+        // manager.read();   // ! it should be adopted to new structure of the EposManager::read() function
         sleep_rate.sleep();
     }
 

@@ -14,15 +14,9 @@
 
 
 class EposCurrentMode : public ControlModeBase {
-public:
-    virtual ~EposCurrentMode();
-
-    virtual void init(ros::NodeHandle &motor_nh, NodeHandle &node_handle, const std::string &controller_name);
-    virtual void activate();
-    virtual void read();
-    virtual void write(const double position, const double velocity, const double current);
-
-private:
+    public:
+        virtual void activate();
+        virtual void write(double &pos, double &vel, double &cur);
 
 };
 

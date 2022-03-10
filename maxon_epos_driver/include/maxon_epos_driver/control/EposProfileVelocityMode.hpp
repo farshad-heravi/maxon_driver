@@ -15,15 +15,10 @@
 
 class EposProfileVelocityMode : public ControlModeBase {
 public:
-    virtual ~EposProfileVelocityMode();
-
-    virtual void init(ros::NodeHandle &motor_nh, NodeHandle &node_handle, const std::string &controller_name);
     virtual void activate();
-    virtual void read();
-    virtual void write(const double position, const double velocity, const double current);
+    virtual void write(double &pos, double &vel, double &cur);
 
 private:
-    int m_max_qc; // These two definitions are from the profile position mode... We still need to figure out some things...
     double m_position_cmd;
 };
 
