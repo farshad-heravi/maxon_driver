@@ -46,5 +46,5 @@ void ControlModeBase::read(double &pos, double &vel, double &cur)
     pos = positionls;
     vel = velocityls;
     cur = currentls;
-    ROS_INFO_STREAM("INSIDE Controller " << pos << ", " << vel << ", " << cur);
+    ROS_DEBUG_STREAM("INSIDE Controller read " << pos << ", " << vel << ", " << cur);
 }

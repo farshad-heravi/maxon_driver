@@ -9,6 +9,7 @@
 
 void EposProfilePositionMode::activate()
 {
+    ROS_INFO_STREAM("Activating profile_position controller.");
     VCS_NODE_COMMAND_NO_ARGS(ActivateProfilePositionMode, m_epos_handle);
 }
 

@@ -5,6 +5,7 @@
  * @date   2019-06-03 16:15:22
  */
 
+#include <ros/ros.h>
 #include "maxon_epos_driver/Definitions.h"
 #include "maxon_epos_driver/EposMotor.hpp"
 #include "maxon_epos_driver/utils/Macros.hpp"
@@ -161,6 +162,7 @@ void EposMotor::initProtocolStackChanges(ros::NodeHandle &motor_nh)
 void EposMotor::initControlMode(ros::NodeHandle &motor_nh){
     // get default control mode from rosparam
     const std::string control_mode(motor_nh.param<std::string>("control_mode", "profile_position"));
+    ROS_INFO_STREAM("default control mode for " << m_motor_name << " is " << control_mode);
 
     if (control_mode == "profile_position") {
         m_control_mode.reset(new EposProfilePositionMode());
@@ -173,6 +175,7 @@ void EposMotor::initControlMode(ros::NodeHandle &motor_nh){
     }
 
     m_control_mode->init(motor_nh, m_epos_handle, control_mode, m_max_qc);
+    m_control_mode->activate();
 }
 
 void EposMotor::changeControlMode(const std::string &cmd_mode, ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh)

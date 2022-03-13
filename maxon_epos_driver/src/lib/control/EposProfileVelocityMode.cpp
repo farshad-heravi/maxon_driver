@@ -9,6 +9,7 @@
 
 void EposProfileVelocityMode::activate()
 {   
+    ROS_INFO_STREAM("Activating profile_velocity controller.");
     VCS_NODE_COMMAND_NO_ARGS(ActivateProfileVelocityMode, m_epos_handle);
 }
 
@@ -16,7 +17,7 @@ void EposProfileVelocityMode::write(double &pos, double &vel, double &cur)
 {
     int quad_count;
     // ! implement ros unit conversion // TODO 
-    ROS_DEBUG_STREAM("Target velocity: " << vel);
-    ROS_DEBUG_STREAM("Send Velocity: " << vel);
+    ROS_INFO_STREAM("Target velocity: " << vel);
+    ROS_INFO_STREAM("Send Velocity: " << vel);
     VCS_NODE_COMMAND(MoveWithVelocity, m_epos_handle, vel);
 }
