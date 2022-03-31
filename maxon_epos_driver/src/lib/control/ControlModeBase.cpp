@@ -31,8 +31,8 @@ void ControlModeBase::read(double &pos, double &vel, double &cur)
     int positionls = 0, velocityls = 0;
     short currentls = 0;
     VCS_NODE_COMMAND(GetPositionIs, m_epos_handle, &positionls);
-    VCS_NODE_COMMAND(GetVelocityIsAveraged, m_epos_handle, &velocityls);
-    VCS_NODE_COMMAND(GetCurrentIsAveraged, m_epos_handle, &currentls);
+    // VCS_NODE_COMMAND(GetVelocityIsAveraged, m_epos_handle, &velocityls);
+    // VCS_NODE_COMMAND(GetCurrentIsAveraged, m_epos_handle, &currentls);       // UNCOMMENT later
 
     if(m_use_ros_unit){
         // quad-counts of the encoder -> rad

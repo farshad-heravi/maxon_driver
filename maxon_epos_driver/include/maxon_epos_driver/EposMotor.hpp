@@ -20,6 +20,7 @@
 class EposMotor {
 public:
     std::string m_motor_name;
+    int m_zero;
     EposMotor();
     virtual ~EposMotor();
 
@@ -29,6 +30,10 @@ public:
     void write(double &pos, double &vel, double &cur);
     void changeControlMode(const std::string &cmd_mode, ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh);
     std::string get_active_controller();
+    int rad2ticks(const double &position);
+    double ticks2rad(const int &ticks);
+    double ticks2rad(const double &ticks);
+    void setZero();
 
 private:
     void initEposDeviceHandle(ros::NodeHandle &motor_nh);

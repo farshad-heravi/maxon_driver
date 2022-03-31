@@ -38,7 +38,7 @@ bool EposManager::init(ros::NodeHandle& root_nh,
     BOOST_FOREACH (const std::string& motor_name, motor_names)
     {
         ROS_INFO_STREAM("Loading Epos: " << motor_name);
-        ros::NodeHandle motor_nh(root_nh, motor_name);  // Change root_nh to robot_nh if you want the parameters to be in /robotName/...
+        ros::NodeHandle motor_nh(robot_nh, motor_name);  // Change root_nh to robot_nh if you want the parameters to be in /robotName/...
         // create motor shared_ptr object
         std::shared_ptr<EposMotor> motor(new EposMotor());
         motor->init(root_nh, motor_nh, motor_name);
@@ -84,7 +84,17 @@ void EposManager::read(std::vector<double> &joint_positions, std::vector<double>
     BOOST_FOREACH (const std::shared_ptr<EposMotor> &motor, m_motors)
     {
         motor->read(joint_positions[i], joint_velocities[i], joint_currents[i]);
-        // ROS_INFO_STREAM("INSIDE EPOS" << joint_positions[i] << ", " << joint_velocities[i] << ", " <<  joint_currents[i]);
+        // ROS_DEBUG_STREAM("INSIDE EPOS" << joint_positions[i] << ", " << joint_velocities[i] << ", " <<  joint_currents[i]);
+        i++;
+    }
+}
+
+void EposManager::setZero()
+{
+    int i = 0;
+    BOOST_FOREACH (std::shared_ptr<EposMotor> &motor, m_motors)
+    {
+        m_motors[i]->setZero();
         i++;
     }
 }
@@ -94,7 +104,7 @@ void EposManager::write(std::vector <double> &pos_command, std::vector <double> 
     int i=0;
     BOOST_FOREACH(const std::shared_ptr<EposMotor> &motor, m_motors )
     {
-        // ROS_INFO_STREAM("Send: [" << pos_command[i] << ", " << vel_command[i] << ", " << cur_command[i] << "] to " << motor->m_motor_name);
+        ROS_DEBUG_STREAM("Send: [" << pos_command[i] << ", " << vel_command[i] << ", " << cur_command[i] << "] to " << motor->m_motor_name);
         motor->write(pos_command[i], vel_command[i], cur_command[i]);
     }
 }

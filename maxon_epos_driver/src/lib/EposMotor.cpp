@@ -32,8 +32,16 @@ EposMotor::~EposMotor()
     try {
         VCS_NODE_COMMAND_NO_ARGS(SetDisableState, m_epos_handle);
     } catch (const EposException &e) {
+        ROS_ERROR_STREAM("Motor2 error ~EposMotor ");
         ROS_ERROR_STREAM(e.what());
     }
+}
+
+void EposMotor::setZero()
+{
+    double tmp1, tmp2, tmp3;
+    read(tmp1, tmp2, tmp3);
+    m_zero = rad2ticks(tmp1);
 }
 
 
@@ -63,20 +71,73 @@ void EposMotor::init(ros::NodeHandle& root_nh, ros::NodeHandle& motor_nh, const 
     VCS_NODE_COMMAND_NO_ARGS(SetEnableState, m_epos_handle);
 }
 
+//! returns position in radians
 void EposMotor::read(double &joint_position, double &joint_velocity, double &joint_current)
 {
     m_control_mode->read(joint_position, joint_velocity, joint_current);
+    m_position = joint_position;
+    // TODO update also vel and cur members
+    // joint_position = joint_position - m_zero;   //
+    joint_position = ticks2rad(joint_position);
+    // TODO convert velocity to rad/s
     // ROS_INFO_STREAM("INSIDE MOTOR" << joint_position << ", " << joint_velocity << ", " << joint_current);
 }
 
+
+int EposMotor::rad2ticks(const double &position)
+{
+    return (int)( position * m_max_qc / (2*M_PI));
+}
+
+double EposMotor::ticks2rad(const int &ticks)
+{
+    return ticks * 2 * M_PI / m_max_qc;
+}
+double EposMotor::ticks2rad(const double &ticks)
+{
+    return ticks * 2 * M_PI / m_max_qc;
+}
+
+// gets pos in radians
 void EposMotor::write(double &pos, double &vel, double &cur)
 {
+    // convert rad 2 ticks
+    // pos = pos + m_zero;
+    double ticks = (double)rad2ticks(pos);
+    // TODO convert velocity to ticks/s also.
+
+    // a condition to avoid sudden big moves compared to m_max_qc
+    int error = ticks-m_position;
+    if ( std::abs(error) > m_max_qc/2) 
+    {
+        double step = std::abs(error) / m_max_qc;
+        for (int i=0; i<step; i++)
+        {
+            int increment = std::min(std::abs(error), m_max_qc/2);
+            if (error<0)
+                increment = -increment;
+            ROS_WARN_STREAM("Dividing maxon motor rotation into several steps to avoid error. step: " << increment);
+            try {
+                if (m_control_mode) {
+                    // ROS_INFO_STREAM("Received: [" << pos << ", " << vel << ", " << cur << "] at " << m_motor_name);
+                    double cmd = m_position+increment;
+                    m_control_mode->write(cmd, vel, cur);
+                }
+            } catch (const EposException &e) {
+                ROS_ERROR_STREAM("Motor ticks: " << ticks);
+                ROS_ERROR_STREAM(e.what());
+            }
+            m_position = m_position + increment;
+            error = ticks-m_position;
+        }
+    }
     try {
         if (m_control_mode) {
             // ROS_INFO_STREAM("Received: [" << pos << ", " << vel << ", " << cur << "] at " << m_motor_name);
-            m_control_mode->write(pos, vel, cur);
+            m_control_mode->write(ticks, vel, cur);
         }
     } catch (const EposException &e) {
+        ROS_ERROR_STREAM("Motor ticks: " << ticks);
         ROS_ERROR_STREAM(e.what());
     }
 }

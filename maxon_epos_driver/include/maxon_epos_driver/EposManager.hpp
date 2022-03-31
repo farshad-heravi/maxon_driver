@@ -28,6 +28,7 @@ public:
 
     void modeSwitch(std::vector<std::string> starting_controller_modes, std::vector<std::string> stoping_controller_modes, ros::NodeHandle &root_nh, ros::NodeHandle &motors_nh);
 
+    void setZero(); //
 private:
     std::vector<std::shared_ptr<EposMotor>> m_motors;
     ros::Publisher m_all_motor_publisher;

@@ -4,7 +4,7 @@
  * @author arwtyxouymz
  * @date   2019-06-04 12:19:52
  */
-
+#include <ros/ros.h>
 #include "maxon_epos_driver/Device.hpp"
 #include "maxon_epos_driver/Definitions.h"
 #include "maxon_epos_driver/utils/Macros.hpp"
@@ -310,6 +310,7 @@ NodeHandle HandleManager::CreateEposHandle(const DeviceInfo &device_info, const 
             return *sub_handle;
         }
     } catch (const EposException &e) {
+        ROS_ERROR_STREAM("Device error");
         ROS_ERROR_STREAM(e.what());
         throw EposException("Create EposHandle (Could not identify node)");
     }
