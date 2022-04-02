@@ -21,6 +21,8 @@
  */
 EposMotor::EposMotor()
     : m_position(0), m_velocity(0), m_effort(0), m_current(0)
+    , m_bIsRunning(false), m_target_pos(0), m_update_interval_(50)
+    , m_readLoop(false)
 {}
 
 /**
@@ -31,6 +33,13 @@ EposMotor::~EposMotor()
 {
     try {
         VCS_NODE_COMMAND_NO_ARGS(SetDisableState, m_epos_handle);
+        m_readLoop = false;
+        if (m_pReadThread != nullptr)
+        {
+            m_pReadThread->join();
+            delete m_pReadThread;
+            m_pReadThread = nullptr;
+        }
     } catch (const EposException &e) {
         ROS_ERROR_STREAM("Motor2 error ~EposMotor ");
         ROS_ERROR_STREAM(e.what());
@@ -42,12 +51,14 @@ void EposMotor::setZero()
     double tmp1, tmp2, tmp3;
     read(tmp1, tmp2, tmp3);
     m_zero = rad2ticks(tmp1);
+    m_target_pos = (int)tmp1;
 }
 
 
 void EposMotor::init(ros::NodeHandle& root_nh, ros::NodeHandle& motor_nh, const std::string& motor_name)
 {
     m_motor_name = motor_name;
+
     // create motor handle
     initEposDeviceHandle(motor_nh);
 
@@ -67,20 +78,30 @@ void EposMotor::init(ros::NodeHandle& root_nh, ros::NodeHandle& motor_nh, const 
     // set other settings
     initMiscParams(motor_nh);
 
+    m_readLoop = true;
+    // start readloop
+    m_pReadThread = new std::thread(this->ReadThread, this);
     // enable the motor
     VCS_NODE_COMMAND_NO_ARGS(SetEnableState, m_epos_handle);
+    // read current position and set it to m_target_pos
+    double pos, temp;
+    m_control_mode->read(pos, temp, temp);
+    m_target_pos = (int)pos;
+    m_bIsRunning = false;
 }
 
 //! returns position in radians
 void EposMotor::read(double &joint_position, double &joint_velocity, double &joint_current)
 {
-    m_control_mode->read(joint_position, joint_velocity, joint_current);
-    m_position = joint_position;
-    // TODO update also vel and cur members
+    // no need => m_control_mode->read(joint_position, joint_velocity, joint_current);
+    joint_position = m_position;
+    joint_velocity = m_velocity;        // in ticks
+    joint_current = m_effort;
     // joint_position = joint_position - m_zero;   //
     joint_position = ticks2rad(joint_position);
     // TODO convert velocity to rad/s
-    // ROS_INFO_STREAM("INSIDE MOTOR" << joint_position << ", " << joint_velocity << ", " << joint_current);
+    // TODO
+    // ROS_INFO_STREAM("INSIDE MOTOR" << joint_position << ", " << joint_velocity << ", " << joint_current << " desireed vel: " << getDesiredVelocity());
 }
 
 
@@ -101,45 +122,8 @@ double EposMotor::ticks2rad(const double &ticks)
 // gets pos in radians
 void EposMotor::write(double &pos, double &vel, double &cur)
 {
-    // convert rad 2 ticks
-    // pos = pos + m_zero;
-    double ticks = (double)rad2ticks(pos);
-    // TODO convert velocity to ticks/s also.
-
-    // a condition to avoid sudden big moves compared to m_max_qc
-    int error = ticks-m_position;
-    if ( std::abs(error) > m_max_qc/2) 
-    {
-        double step = std::abs(error) / m_max_qc;
-        for (int i=0; i<step; i++)
-        {
-            int increment = std::min(std::abs(error), m_max_qc/2);
-            if (error<0)
-                increment = -increment;
-            ROS_WARN_STREAM("Dividing maxon motor rotation into several steps to avoid error. step: " << increment);
-            try {
-                if (m_control_mode) {
-                    // ROS_INFO_STREAM("Received: [" << pos << ", " << vel << ", " << cur << "] at " << m_motor_name);
-                    double cmd = m_position+increment;
-                    m_control_mode->write(cmd, vel, cur);
-                }
-            } catch (const EposException &e) {
-                ROS_ERROR_STREAM("Motor ticks: " << ticks);
-                ROS_ERROR_STREAM(e.what());
-            }
-            m_position = m_position + increment;
-            error = ticks-m_position;
-        }
-    }
-    try {
-        if (m_control_mode) {
-            // ROS_INFO_STREAM("Received: [" << pos << ", " << vel << ", " << cur << "] at " << m_motor_name);
-            m_control_mode->write(ticks, vel, cur);
-        }
-    } catch (const EposException &e) {
-        ROS_ERROR_STREAM("Motor ticks: " << ticks);
-        ROS_ERROR_STREAM(e.what());
-    }
+    // ROS_INFO_STREAM("inside write of EposMotor!");
+    setTargetPoint(pos);
 }
 
 /**
@@ -327,6 +311,9 @@ void EposMotor::initProfilePosition(ros::NodeHandle &motor_nh)
             profile_position_nh.getParam("acceleration", acceleration);
             profile_position_nh.getParam("deceleration", deceleration);
             VCS_NODE_COMMAND(SetPositionProfile, m_epos_handle, velocity, acceleration, deceleration);
+            // set desired velocity
+            double vel = velocity * 2 * M_PI / 60;      // rad/s //TODO
+            setDesiredVelocity(vel);
     } else {
         ROS_ERROR_STREAM("Do set all parameters of ProfilePosition.");
     }
@@ -367,4 +354,150 @@ void EposMotor::initMiscParams(ros::NodeHandle &motor_nh)
 {
     // use ros unit or default epos unit
     motor_nh.param("use_ros_unit", m_use_ros_unit, false);
+}
+
+//! \brief Starts the thread that is spinning in the write loop that sends periodic SetJoint commands to the module over the CAN bus.
+void EposMotor::Start()
+{
+    m_bIsRunning = true;
+    m_pWriteThread = new std::thread(this->WriteThread, this);
+}
+
+//! \brief Terminates and joins the thread that is spinning in the write loop that sends periodic SetJoint commands to the module over the CAN bus.
+void EposMotor::Stop()
+{
+    m_bIsRunning = false;
+    if (m_pWriteThread != nullptr)
+    {
+        m_pWriteThread->join();
+        delete m_pWriteThread;
+        m_pWriteThread = nullptr;
+    }
+}
+
+//! \brief Entry point for the write thread.
+//! \param pModule A pointer to the Module instance associated with the write thread.
+void EposMotor::ReadThread(EposMotor * pModule)
+{
+    pModule->ReadLoop();
+}
+
+void EposMotor::WriteThread(EposMotor * pModule)
+{
+    pModule->WriteLoop();
+}
+
+//! @param get in ms
+void EposMotor::setDesiredVelocity(const double &vel)
+{
+    m_desired_velocity = rad2ticks(vel);
+    ROS_INFO_STREAM("set velocity to : " << m_velocity);
+}
+
+int EposMotor::getDesiredVelocity()
+{
+    return m_desired_velocity;
+}
+
+//! get pos in radians
+void EposMotor::setTargetPoint(const double &pos)
+{
+    m_target_pos = rad2ticks(pos);
+}
+
+//! @param get in ms
+void EposMotor::setUpdateInterval(int milis)
+{
+    m_update_interval_ = milis;
+}
+
+int EposMotor::getUpdateInterval()
+{
+    return m_update_interval_;
+}
+
+//! \brief The write loop that will asynchronuously send setposition messages to the module over the CAN bus.
+void EposMotor::WriteLoop()
+{
+    ROS_INFO("Epos Write thread started.");
+    while (m_bIsRunning)
+    {
+        std::chrono::high_resolution_clock::time_point last=std::chrono::high_resolution_clock::now();
+        if (m_target_pos != m_position && std::abs(m_target_pos-m_position) > 10)
+        {
+            double second = 0.001 * m_update_interval_;
+            int max_increment = (int)(second * m_desired_velocity);
+            int increment = max_increment;
+            if (m_target_pos < m_position)
+                increment = -increment;
+            if ( std::abs(m_target_pos-m_position) < max_increment )
+                increment = m_target_pos - m_position;
+            // ROS_INFO_STREAM("#################################");
+            // ROS_INFO_STREAM("m_target_pos: " << m_target_pos);
+            // ROS_INFO_STREAM("m_position: " << m_position);
+            // ROS_INFO_STREAM("error: " << m_target_pos-m_position);
+            // ROS_INFO_STREAM("m_update_interval_: " << m_update_interval_);
+            // ROS_INFO_STREAM("m_desired_velocity: " << m_desired_velocity);
+            // ROS_INFO_STREAM("increment: " << increment);
+            // send command to motor
+            try {
+                double new_pos = m_position+increment, temp=0.0;
+                if (m_control_mode){
+                    // ROS_INFO_STREAM("Writing: " << new_pos);
+                    m_control_mode->write(new_pos, temp, temp); // TODO now, only for position control
+                } else
+                    ROS_ERROR_STREAM("EposMotor's control mode is not available.");
+            } catch (const EposException &e) {
+                double error = m_target_pos - m_position;
+                ROS_ERROR_STREAM("Motor ticks: " << error << " [ticks] = " << ticks2rad(error) << " [rad]");
+                ROS_ERROR_STREAM(e.what());
+            }
+        }
+        std::chrono::high_resolution_clock::time_point current=std::chrono::high_resolution_clock::now();
+        int64_t ms=(std::chrono::duration_cast<std::chrono::milliseconds>(current - last)).count();
+        if(ms<m_update_interval_)
+            std::this_thread::sleep_for(std::chrono::milliseconds(m_update_interval_-ms));
+    }
+    ROS_INFO("EPOS Write thread terminating.");
+}
+
+void EposMotor::ReadLoop()
+{
+    ROS_INFO_STREAM("Epos Read thread started.");
+    while (m_readLoop)
+    {
+        std::chrono::high_resolution_clock::time_point last=std::chrono::high_resolution_clock::now();
+        
+        int positionls = 0, velocityls = 0;
+        short currentls = 0;
+        try{
+            VCS_NODE_COMMAND(GetPositionIs, m_epos_handle, &positionls);
+            // ROS_INFO_STREAM("Epos Reads positionls: " << positionls);
+        } catch (const EposException &e) {
+            ROS_ERROR_STREAM("Epos GetPositionIs error!");
+            ROS_ERROR_STREAM(e.what());
+        }
+        // VCS_NODE_COMMAND(GetVelocityIsAveraged, m_epos_handle, &velocityls);
+        // VCS_NODE_COMMAND(GetCurrentIsAveraged, m_epos_handle, &currentls);       // UNCOMMENT later
+
+        // if(m_use_ros_unit){  // TODO handle this part later
+        //     // quad-counts of the encoder -> rad
+        //     positionls = (positionls / static_cast<double>(m_max_qc_)) * 2. * M_PI;
+        //     // rpm -> rad/s
+        //     vel = velocityls * M_PI / 30.;
+        //     // mA -> A
+        //     cur = currentls / 1000.;
+        //     return;
+        // }
+        m_position = positionls;
+        // ROS_INFO_STREAM("Epos Reads m_position: " << m_position);
+        // m_velocity = velocityls;
+        // m_effort = currentls;
+
+        std::chrono::high_resolution_clock::time_point current=std::chrono::high_resolution_clock::now();
+        int64_t ms=(std::chrono::duration_cast<std::chrono::milliseconds>(current - last)).count();
+        if(ms<m_update_interval_)
+            std::this_thread::sleep_for(std::chrono::milliseconds(m_update_interval_-ms));
+    }
+    ROS_INFO("EPOS Write thread terminating.");
 }

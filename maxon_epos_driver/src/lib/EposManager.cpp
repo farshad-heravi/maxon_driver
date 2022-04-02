@@ -43,6 +43,7 @@ bool EposManager::init(ros::NodeHandle& root_nh,
         std::shared_ptr<EposMotor> motor(new EposMotor());
         motor->init(root_nh, motor_nh, motor_name);
         m_motors.push_back(motor);
+        motor->Start();
     }
     
     // m_all_motor_publisher = robot_nh.advertise<maxon_epos_msgs::MotorStates>("get_all_states", 100);

@@ -30,7 +30,12 @@ void ControlModeBase::read(double &pos, double &vel, double &cur)
 {
     int positionls = 0, velocityls = 0;
     short currentls = 0;
-    VCS_NODE_COMMAND(GetPositionIs, m_epos_handle, &positionls);
+    try{
+        VCS_NODE_COMMAND(GetPositionIs, m_epos_handle, &positionls);
+    } catch (const EposException &e) {
+        ROS_ERROR_STREAM("Epos GetPositionIs error!");
+        ROS_ERROR_STREAM(e.what());
+    }
     // VCS_NODE_COMMAND(GetVelocityIsAveraged, m_epos_handle, &velocityls);
     // VCS_NODE_COMMAND(GetCurrentIsAveraged, m_epos_handle, &currentls);       // UNCOMMENT later
 
